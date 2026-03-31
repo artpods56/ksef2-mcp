@@ -1,43 +1,48 @@
-from importlib.metadata import version
+import asyncio
 
-import pytest
-from ksef2 import Environment
-
-from ksef2_mcp.server import (
-    available_client_features,
-    environment_summary_payload,
-    parse_environment,
-    sdk_overview_payload,
-)
+from ksef2_mcp.config import AppSettings, BackendMode
+from ksef2_mcp.server import build_argument_parser, create_server
 
 
-def test_parse_environment_accepts_case_insensitive_names() -> None:
-    assert parse_environment("test") is Environment.TEST
-    assert parse_environment("Production") is Environment.PRODUCTION
+def test_build_argument_parser_uses_streamable_http_defaults() -> None:
+    parser = build_argument_parser()
+
+    args = parser.parse_args([])
+
+    assert args.transport == "streamable-http"
+    assert args.host == "127.0.0.1"
+    assert args.port == 8000
 
 
-def test_parse_environment_rejects_unknown_values() -> None:
-    with pytest.raises(ValueError, match="Unsupported environment"):
-        parse_environment("sandbox")
+def test_create_server_registers_core_tools() -> None:
+    async def list_tools():
+        server = create_server(AppSettings())
+        return await server.list_tools()
+
+    tools = asyncio.run(list_tools())
+    tool_names = {tool.name for tool in tools}
+
+    assert "generate_token" in tool_names
+    assert "create_invoice_builder" in tool_names
+    assert "create_invoice_download_link" in tool_names
 
 
-def test_sdk_overview_reports_installed_versions() -> None:
-    payload = sdk_overview_payload()
+def test_create_server_platform_mode_enables_auth_provider() -> None:
+    settings = AppSettings(
+        backend_mode=BackendMode.PLATFORM,
+        required_scopes=["ksef:mcp"],
+        platform_access_bindings_json="[]",
+    )
 
-    assert payload["ksef2_version"] == version("ksef2")
-    assert payload["mcp_version"] == version("mcp")
-    assert any(item["name"] == "TEST" for item in payload["environments"])
-    assert "FA3" in payload["form_schemas"]
+    server = create_server(settings)
 
-
-def test_available_client_features_include_testdata_only_in_test() -> None:
-    assert "testdata" in available_client_features(Environment.TEST)
-    assert "testdata" not in available_client_features(Environment.PRODUCTION)
+    assert server.auth is not None
 
 
-def test_environment_summary_matches_environment() -> None:
-    payload = environment_summary_payload("DEMO")
+def test_create_server_registers_invoice_download_route() -> None:
+    server = create_server(AppSettings())
 
-    assert payload["environment"] == "DEMO"
-    assert payload["supports_testdata"] is False
-    assert "authentication" in payload["client_features"]
+    routes = server._get_additional_http_routes()
+    paths = {route.path for route in routes}
+
+    assert "/downloads/invoices/{download_id}" in paths
