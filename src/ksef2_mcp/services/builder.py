@@ -1,20 +1,19 @@
 import abc
 from collections.abc import Sequence
-from datetime import datetime, date
+from datetime import date, datetime
 from decimal import Decimal
 from enum import Enum
 from functools import lru_cache
-from typing import Self, Literal
+from typing import Literal, Self
 from uuid import UUID
 
-from ksef2.domain.models.fa3.body import VatRate, SaleCategory, InvoiceType
+from ksef2.domain.models.fa3.body import InvoiceType, SaleCategory, VatRate
 from ksef2.services import FA3InvoiceBuilder
 from pydantic import ValidationError
 
 from ksef2_mcp import errors
-from ksef2_mcp.domain.models import InvoiceBuilderHandle, PendingInvoiceBody
-
 from ksef2_mcp.adapters.uow import fresh_uow
+from ksef2_mcp.domain.models import InvoiceBuilderHandle, PendingInvoiceBody
 
 
 class BaseInvoiceBuilder(abc.ABC):
@@ -35,6 +34,16 @@ class LocalInvoiceBuilderService(BaseInvoiceBuilder):
     def __init__(self):
         pass
 
+    def _normalize_wrapped_text(self, value: str) -> str:
+        normalized = value.strip()
+        while (
+            len(normalized) >= 2
+            and normalized[0] == normalized[-1]
+            and normalized[0] in {"'", '"'}
+        ):
+            normalized = normalized[1:-1].strip()
+        return normalized
+
     def _normalize_optional_text(self, value: str | None) -> str | None:
         if value is None:
             return None
@@ -52,7 +61,7 @@ class LocalInvoiceBuilderService(BaseInvoiceBuilder):
         if isinstance(value, enum_type):
             return value
 
-        normalized = str(value).strip()
+        normalized = self._normalize_wrapped_text(str(value))
         lookup = normalized.casefold()
 
         if aliases is not None and lookup in aliases:
@@ -279,11 +288,23 @@ class LocalInvoiceBuilderService(BaseInvoiceBuilder):
 
                 return builder_handle
         except (ValidationError, ValueError) as exc:
-            raise errors.InvalidInputError(f"Failed to add line to builder: {exc}") from exc
+            message = str(exc)
+            if "STANDARD sale_category requires vat_rate equal to" in message:
+                raise errors.InvalidInputError(
+                    "Invalid VAT configuration for line item: "
+                    "sale_category='STANDARD' only supports VAT rates 23, 22, 8, "
+                    "7, or 5. Use a matching sale_category for values like "
+                    "'zw', 'np', or 'oo'."
+                ) from exc
+            raise errors.InvalidInputError(
+                f"Failed to add line to builder: {exc}"
+            ) from exc
         except errors.KsefMcpError:
             raise
         except Exception as exc:
-            raise errors.InvoiceBuilderError(f"Failed to add line to builder: {exc}") from exc
+            raise errors.InvoiceBuilderError(
+                f"Failed to add line to builder: {exc}"
+            ) from exc
 
     def add_body(
         self,
@@ -319,11 +340,15 @@ class LocalInvoiceBuilderService(BaseInvoiceBuilder):
                 return builder_handle
 
         except (ValidationError, ValueError) as exc:
-            raise errors.InvalidInputError(f"Failed to add body to builder: {exc}") from exc
+            raise errors.InvalidInputError(
+                f"Failed to add body to builder: {exc}"
+            ) from exc
         except errors.KsefMcpError:
             raise
         except Exception as exc:
-            raise errors.InvoiceBuilderError(f"Failed to add body to builder: {exc}") from exc
+            raise errors.InvoiceBuilderError(
+                f"Failed to add body to builder: {exc}"
+            ) from exc
 
     def get_builder_handle(self, uuid: UUID) -> InvoiceBuilderHandle:
         try:

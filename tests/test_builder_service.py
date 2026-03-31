@@ -109,6 +109,84 @@ def test_build_invoice_supports_normalized_aliases() -> None:
     assert "Consulting service" in xml
 
 
+def test_add_line_accepts_quoted_vat_rate_values() -> None:
+    service = LocalInvoiceBuilderService()
+    handle = service.create_invoice_builder()
+
+    service.add_entity(
+        uuid=handle.uuid,
+        entity_type="seller",
+        name="Sample Seller Sp. z o.o.",
+        country_code="PL",
+        address_line_1="ul. Prosta 1",
+        tax_id="5250001001",
+    )
+    service.add_entity(
+        uuid=handle.uuid,
+        entity_type="buyer",
+        name="Sample Buyer Sp. z o.o.",
+        country_code="PL",
+        address_line_1="ul. Klienta 2",
+        tax_id="5250001002",
+    )
+    service.add_body(
+        uuid=handle.uuid,
+        issue_date=date(2026, 3, 31),
+        invoice_type="basic",
+    )
+
+    ready = service.add_line(
+        uuid=handle.uuid,
+        name="Consulting service",
+        quantity=Decimal("1"),
+        unit_price_net=Decimal("100.00"),
+        sale_category="STANDARD",
+        vat_rate='"23"',
+    )
+
+    assert ready.is_ready_to_build is True
+
+
+def test_add_line_reports_clear_standard_vat_conflict() -> None:
+    service = LocalInvoiceBuilderService()
+    handle = service.create_invoice_builder()
+
+    service.add_entity(
+        uuid=handle.uuid,
+        entity_type="seller",
+        name="Sample Seller Sp. z o.o.",
+        country_code="PL",
+        address_line_1="ul. Prosta 1",
+        tax_id="5250001001",
+    )
+    service.add_entity(
+        uuid=handle.uuid,
+        entity_type="buyer",
+        name="Sample Buyer Sp. z o.o.",
+        country_code="PL",
+        address_line_1="ul. Klienta 2",
+        tax_id="5250001002",
+    )
+    service.add_body(
+        uuid=handle.uuid,
+        issue_date=date(2026, 3, 31),
+        invoice_type="basic",
+    )
+
+    with pytest.raises(
+        InvalidInputError,
+        match="sale_category='STANDARD' only supports VAT rates 23, 22, 8, 7, or 5",
+    ):
+        service.add_line(
+            uuid=handle.uuid,
+            name="Consulting service",
+            quantity=Decimal("1"),
+            unit_price_net=Decimal("100.00"),
+            sale_category="STANDARD",
+            vat_rate="oo",
+        )
+
+
 def test_add_seller_requires_tax_id_with_clear_message() -> None:
     service = LocalInvoiceBuilderService()
     handle = service.create_invoice_builder()
