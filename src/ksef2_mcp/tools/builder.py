@@ -427,6 +427,18 @@ DownloadFileName = Annotated[
     ),
 ]
 
+DownloadFileFormat = Annotated[
+    Literal["xml", "pdf"],
+    Field(
+        description=(
+            "Download format for the generated invoice artifact. Use 'xml' for "
+            "the raw FA(3) invoice file or 'pdf' for a rendered PDF preview."
+        ),
+        examples=["xml", "pdf"],
+        default="xml",
+    ),
+]
+
 
 def _to_builder_result(
     handle: InvoiceBuilderHandle,
@@ -630,9 +642,11 @@ def build_invoice_xml(
 )
 def create_invoice_download_link(
     uuid: BuilderUUID,
+    file_format: DownloadFileFormat = "xml",
     file_name: DownloadFileName = None,
 ) -> InvoiceDownloadLinkResult:
     return get_invoice_download_service().create_invoice_download_link(
         uuid=uuid,
+        file_format=file_format,
         file_name=file_name,
     )

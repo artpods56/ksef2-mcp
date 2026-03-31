@@ -85,6 +85,36 @@ def test_create_invoice_download_link_saves_xml_and_returns_absolute_url(
     assert "Sample Seller Sp. z o.o." in saved_file.read_text(encoding="utf-8")
 
 
+def test_create_invoice_download_link_saves_pdf_when_requested(tmp_path: Path) -> None:
+    builder_service, builder_uuid = _create_ready_builder()
+
+    class StubPdfExporter:
+        def export_from_string(self, invoice_xml: str) -> bytes:
+            assert "Sample Seller Sp. z o.o." in invoice_xml
+            return b"%PDF-1.7 sample"
+
+    download_service = InvoiceDownloadService(
+        builder_service=builder_service,
+        pdf_exporter=StubPdfExporter(),  # pyright: ignore[reportArgumentType]
+    )
+    settings = AppSettings(
+        default_export_directory=tmp_path,
+        resource_server_url="http://downloads.example",
+    )
+
+    result = download_service.create_invoice_download_link(
+        uuid=builder_uuid,
+        file_format="pdf",
+        file_name="March invoice",
+        settings=settings,
+    )
+
+    saved_file = Path(result.file_path)
+    assert result.file_name == "March_invoice.pdf"
+    assert result.media_type == "application/pdf"
+    assert saved_file.read_bytes() == b"%PDF-1.7 sample"
+
+
 def test_download_invoice_route_serves_saved_invoice_xml(tmp_path: Path) -> None:
     builder_service, builder_uuid = _create_ready_builder()
     download_service = InvoiceDownloadService(builder_service=builder_service)
@@ -106,3 +136,35 @@ def test_download_invoice_route_serves_saved_invoice_xml(tmp_path: Path) -> None
     assert response.headers["content-type"].startswith("application/xml")
     assert response.headers["content-disposition"].startswith("attachment;")
     assert "Consulting service" in response.text
+
+
+def test_download_invoice_route_serves_saved_invoice_pdf(tmp_path: Path) -> None:
+    builder_service, builder_uuid = _create_ready_builder()
+
+    class StubPdfExporter:
+        def export_from_string(self, invoice_xml: str) -> bytes:
+            assert "Consulting service" in invoice_xml
+            return b"%PDF-1.7 route"
+
+    download_service = InvoiceDownloadService(
+        builder_service=builder_service,
+        pdf_exporter=StubPdfExporter(),  # pyright: ignore[reportArgumentType]
+    )
+    settings = AppSettings(
+        default_export_directory=tmp_path,
+        resource_server_url="http://testserver",
+    )
+    result = download_service.create_invoice_download_link(
+        uuid=builder_uuid,
+        file_format="pdf",
+        settings=settings,
+    )
+
+    app = create_server(settings).http_app(transport="streamable-http")
+
+    with TestClient(app) as client:
+        response = client.get(f"/downloads/invoices/{result.download_id}")
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("application/pdf")
+    assert response.content == b"%PDF-1.7 route"

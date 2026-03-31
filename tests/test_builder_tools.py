@@ -90,8 +90,10 @@ def test_create_invoice_download_link_tool_delegates_to_service(
 
     result = create_invoice_download_link(
         uuid=uuid4(),
+        file_format="pdf",
         file_name="invoice.xml",
     )
 
     assert result == expected
+    assert seen["file_format"] == "pdf"
     assert seen["file_name"] == "invoice.xml"
