@@ -1,0 +1,20 @@
+[
+  {
+    "token": "replace-with-real-bearer-token",
+    "client_id": "chatgpt-client",
+    "workspace_id": "workspace-a",
+    "user_id": "user-a",
+    "capabilities": [
+      "send_invoice",
+      "check_invoice_status",
+      "export_invoices",
+      "get_export_status",
+      "download_export_package",
+      "list_permissions",
+      "generate_token",
+      "get_operation_status"
+    ],
+    "environment": "TEST",
+    "scopes": ["ksef:mcp"]
+  }
+]

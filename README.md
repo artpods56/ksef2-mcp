@@ -30,10 +30,43 @@ To run the server, use:
 uv run --env-file .env python -m ksef2_mcp
 ```
 
+Invoice authoring is exposed as a small stateful runtime, not as one tool per builder method. The intended flow is:
+
+- `create_draft`
+- `get_contexts`
+- `get_possible_methods`
+- `update_draft`
+- `build_draft`
+- `delete_draft`
+
+## Demo MVP
+
+---
+The most realistic MVP scenario currently covered is a standard domestic B2B service invoice:
+
+- Polish seller and buyer
+- PLN currency
+- standard 23% VAT
+- recurring monthly service billing period
+- one-off additional service line
+- invoice number, issue place, contact data, and line-level supply date
+
+Runnable example:
+
+```bash
+uv run python -m ksef2_mcp.demo.standard_service_invoice
+```
+
+This writes a realistic FA(3) XML example to `output/standard-service-invoice.xml` through the same draft/context runtime that the MCP server exposes.
+
+## Honest Scope
+
+---
+This is suitable for demos and straightforward invoice-generation cases, especially for small businesses issuing simple domestic invoices. It should not yet be presented as full FA(3) coverage for correcting invoices, complex exemption bases, margin procedures, or advanced foreign-currency handling.
+
 ## License
 
 ---
 
 
 This software is shared under the [MIT](LICENSE.md) license.
-
