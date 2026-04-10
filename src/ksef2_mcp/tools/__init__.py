@@ -1,14 +1,12 @@
 from fastmcp import FastMCP
 
-from ksef2_mcp.tools.builder import (
-    add_invoice_body,
-    add_invoice_entity,
-    add_invoice_header,
-    add_invoice_line,
-    build_invoice_xml,
-    create_invoice_builder,
-    create_invoice_download_link,
-    get_invoice_builder_handle,
+from ksef2_mcp.tools.drafts import (
+    build_draft,
+    create_draft,
+    delete_draft,
+    get_contexts,
+    get_possible_methods,
+    update_draft,
 )
 from ksef2_mcp.tools.permissions import list_permissions
 from ksef2_mcp.tools.sessions import (
@@ -36,12 +34,10 @@ def register_tools(app: FastMCP) -> None:
     app.add_tool(close_interactive_session)
     app.add_tool(list_interactive_sessions)
 
-    # --- invoice builder tools ---
-    app.add_tool(create_invoice_builder)
-    app.add_tool(get_invoice_builder_handle)
-    app.add_tool(add_invoice_header)
-    app.add_tool(add_invoice_entity)
-    app.add_tool(add_invoice_line)
-    app.add_tool(add_invoice_body)
-    app.add_tool(build_invoice_xml)
-    app.add_tool(create_invoice_download_link)
+    # --- draft runtime tools ---
+    app.add_tool(create_draft)
+    app.add_tool(get_contexts)
+    app.add_tool(get_possible_methods)
+    app.add_tool(update_draft)
+    app.add_tool(build_draft)
+    app.add_tool(delete_draft)

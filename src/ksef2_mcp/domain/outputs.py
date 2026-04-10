@@ -2,9 +2,10 @@ from datetime import datetime
 from typing import Any
 from uuid import UUID
 
+from pydantic import Field
+
 from ksef2_mcp.domain.common import ContractModel
 from ksef2_mcp.domain.enums import InvoiceStatus, SubmissionStatus
-from ksef2_mcp.domain.models import InvoiceBuilderStep
 
 
 class UploadInvoiceXmlResult(ContractModel):
@@ -42,16 +43,72 @@ class SubmissionResult(ContractModel):
     details: dict[str, Any] | None = None
 
 
-class InvoiceBuilderHandleResult(ContractModel):
-    uuid: UUID
-    completed_steps: list[InvoiceBuilderStep]
-    missing_steps: list[InvoiceBuilderStep]
-    is_ready_to_build: bool
-
-
 class InvoiceDownloadLinkResult(ContractModel):
     download_id: str
     download_url: str
     file_name: str
     file_path: str
     media_type: str
+
+
+class DraftContextResult(ContractModel):
+    context_id: str
+    builder_type: str
+    parent_context_id: str | None = None
+    opened_via_method: str | None = None
+
+
+class DraftMethodResult(ContractModel):
+    name: str
+    operation_type: str
+    payload_schema: dict[str, Any]
+
+
+class CreateDraftResult(ContractModel):
+    draft_id: UUID
+    draft_type: str
+    root_context_id: str
+
+
+class DraftContextsResult(ContractModel):
+    draft_id: UUID
+    draft_type: str
+    contexts: list[DraftContextResult] = Field(default_factory=list)
+
+
+class DraftPossibleMethodsResult(ContractModel):
+    draft_id: UUID
+    context_id: str
+    builder_type: str
+    methods: list[DraftMethodResult] = Field(default_factory=list)
+
+
+class DraftOperationResult(ContractModel):
+    op_index: int
+    op_id: str | None = None
+    op: str
+    context_id: str
+    method: str
+    status: str
+    new_context_id: str | None = None
+    message: str | None = None
+    error_code: str | None = None
+
+
+class UpdateDraftResult(ContractModel):
+    draft_id: UUID
+    draft_type: str
+    operations: list[DraftOperationResult] = Field(default_factory=list)
+    contexts: list[DraftContextResult] = Field(default_factory=list)
+
+
+class BuildDraftResult(ContractModel):
+    draft_id: UUID
+    draft_type: str
+    output_format: str
+    content: Any
+
+
+class DeleteDraftResult(ContractModel):
+    draft_id: UUID
+    deleted: bool

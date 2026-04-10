@@ -3,27 +3,8 @@ from types import TracebackType
 from typing import Self, Sequence
 from uuid import UUID
 
-from ksef2.services.fa3_builder import FA3InvoiceBuilder
-from ksef2_mcp.domain import SessionHandle, Invoice, InvoiceStatus
-from ksef2_mcp.domain.models import InvoiceBuilderHandle
-
-
-class AbstractInvoiceBuilderRepository(abc.ABC):
-    @abc.abstractmethod
-    def add_builder(self, builder: InvoiceBuilderHandle) -> None:
-        raise NotImplementedError
-
-    @abc.abstractmethod
-    def get_builder(self, uuid: UUID) -> InvoiceBuilderHandle | None:
-        raise NotImplementedError
-
-    @abc.abstractmethod
-    def get_builder_or_raise(self, uuid: UUID) -> InvoiceBuilderHandle:
-        raise NotImplementedError
-
-    @abc.abstractmethod
-    def list_all(self) -> Sequence[UUID]:
-        raise NotImplementedError
+from ksef2_mcp.domain import Invoice, InvoiceStatus, SessionHandle
+from ksef2_mcp.domain.drafts import DraftSession
 
 
 class AbstractSessionStateRepository(abc.ABC):
@@ -41,6 +22,28 @@ class AbstractSessionStateRepository(abc.ABC):
 
     @abc.abstractmethod
     def list_all(self) -> Sequence[SessionHandle]:
+        raise NotImplementedError
+
+
+class AbstractDraftSessionRepository(abc.ABC):
+    @abc.abstractmethod
+    def add(self, draft_session: DraftSession) -> None:
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    def get(self, draft_id: UUID) -> DraftSession | None:
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    def get_or_raise(self, draft_id: UUID) -> DraftSession:
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    def delete(self, draft_id: UUID) -> bool:
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    def list_all(self) -> Sequence[DraftSession]:
         raise NotImplementedError
 
 
@@ -64,7 +67,7 @@ class AbstractInvoiceRepository(abc.ABC):
 
 class AbstractUnitOfWork(abc.ABC):
     session_states: AbstractSessionStateRepository
-    invoice_builders: AbstractInvoiceBuilderRepository
+    draft_sessions: AbstractDraftSessionRepository
 
     @abc.abstractmethod
     def rollback(self) -> None:

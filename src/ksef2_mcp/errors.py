@@ -16,7 +16,7 @@ class ErrorCode(str, Enum):
     RESOURCE_NOT_FOUND = "RESOURCE_NOT_FOUND"
     RESOURCE_NOT_READY = "RESOURCE_NOT_READY"
     WORKSPACE_NOT_FOUND = "WORKSPACE_NOT_FOUND"
-    INVOICE_BUILDER_ERROR = "INVOICE_BUILDER_ERROR"
+    DRAFT_RUNTIME_ERROR = "DRAFT_RUNTIME_ERROR"
 
 
 class KsefMcpError(Exception):
@@ -116,11 +116,11 @@ class PlatformError(KsefMcpError):
         super().__init__(ErrorCode.PLATFORM_ERROR, message, details=details)
 
 
-class InvoiceBuilderError(KsefMcpError):
+class DraftRuntimeError(KsefMcpError):
     def __init__(
         self,
         message: str,
         *,
         details: dict[str, Any] | None = None,
     ) -> None:
-        super().__init__(ErrorCode.INVOICE_BUILDER_ERROR, message, details=details)
+        super().__init__(ErrorCode.DRAFT_RUNTIME_ERROR, message, details=details)

@@ -1,14 +1,18 @@
 import copy
 from types import TracebackType
-from typing import Self, final, override, TypedDict
+from typing import Self, TypedDict, final, override
 from uuid import UUID
 
 from sqlalchemy.orm import Session, sessionmaker
 
 from ksef2_mcp.adapters.database import repository as database_repository
 from ksef2_mcp.adapters.database.repository import InMemorySessionStateRepository
-from ksef2_mcp.adapters.adapters import InMemoryInvoiceBuilderRepository
-from ksef2_mcp.domain.models import SessionHandle, InvoiceBuilderHandle
+from ksef2_mcp.adapters.draft_store import (
+    _SHARED_DRAFT_STATES,
+    DraftState,
+    InMemoryDraftSessionRepository,
+)
+from ksef2_mcp.domain.models import SessionHandle
 from ksef2_mcp.ports.repository import AbstractUnitOfWork
 
 
@@ -23,6 +27,9 @@ class SqlAlchemyUnitOfWork(AbstractUnitOfWork):
         self.session = self.session_factory()
         self.session_states = database_repository.SQLAlchemySessionStateRepository(
             self.session
+        )
+        self.draft_sessions = InMemoryDraftSessionRepository(
+            _SHARED_IN_MEMORY_STORE["drafts"]
         )
 
         return self
@@ -49,20 +56,18 @@ class SqlAlchemyUnitOfWork(AbstractUnitOfWork):
 
 
 type SessionState = dict[UUID, SessionHandle]
-type InvoiceBuilderState = dict[UUID, InvoiceBuilderHandle]
 
 
 class InMemoryStore(TypedDict):
     sessions: SessionState
-    builders: InvoiceBuilderState
+    drafts: DraftState
 
 
 _SHARED_IN_MEMORY_STORE: InMemoryStore = {
     "sessions": {},
-    "builders": {},
+    "drafts": _SHARED_DRAFT_STATES,
 }
 _SHARED_SESSION_STATES = _SHARED_IN_MEMORY_STORE["sessions"]
-_SHARED_IN_MEMORY_BUILDERS = _SHARED_IN_MEMORY_STORE["builders"]
 
 
 @final
@@ -72,8 +77,8 @@ class InMemoryUnitOfWork(AbstractUnitOfWork):
         self.session_states: InMemorySessionStateRepository = (
             InMemorySessionStateRepository(_SHARED_IN_MEMORY_STORE["sessions"])
         )
-        self.invoice_builders: InMemoryInvoiceBuilderRepository = (
-            InMemoryInvoiceBuilderRepository(_SHARED_IN_MEMORY_STORE["builders"])
+        self.draft_sessions = InMemoryDraftSessionRepository(
+            _SHARED_IN_MEMORY_STORE["drafts"]
         )
 
     @override
@@ -96,8 +101,13 @@ class InMemoryUnitOfWork(AbstractUnitOfWork):
         if self._backup_store is None:
             raise RuntimeError("Cannot rollback without entering the context")
         _SHARED_IN_MEMORY_STORE["sessions"].clear()
-        _SHARED_IN_MEMORY_STORE["builders"].clear()
-        _SHARED_IN_MEMORY_STORE.update(copy.deepcopy(self._backup_store))
+        _SHARED_IN_MEMORY_STORE["sessions"].update(
+            copy.deepcopy(self._backup_store["sessions"])
+        )
+        _SHARED_IN_MEMORY_STORE["drafts"].clear()
+        _SHARED_IN_MEMORY_STORE["drafts"].update(
+            copy.deepcopy(self._backup_store["drafts"])
+        )
         self._backup_store = None
 
 

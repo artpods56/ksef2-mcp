@@ -23,8 +23,10 @@ def test_create_server_registers_core_tools() -> None:
     tool_names = {tool.name for tool in tools}
 
     assert "generate_token" in tool_names
-    assert "create_invoice_builder" in tool_names
-    assert "create_invoice_download_link" in tool_names
+    assert "create_draft" in tool_names
+    assert "get_possible_methods" in tool_names
+    assert "update_draft" in tool_names
+    assert "build_draft" in tool_names
 
 
 def test_create_server_platform_mode_enables_auth_provider() -> None:

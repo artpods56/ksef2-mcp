@@ -4,6 +4,10 @@ from typing import Callable, Self, final, override
 from sqlalchemy.orm import Session, sessionmaker
 
 from ksef2_mcp.adapters.database import get_session_factory, repository
+from ksef2_mcp.adapters.draft_store import (
+    _SHARED_DRAFT_STATES,
+    InMemoryDraftSessionRepository,
+)
 from ksef2_mcp.ports.repository import AbstractUnitOfWork
 
 
@@ -19,6 +23,7 @@ class SqlAlchemyUnitOfWork(AbstractUnitOfWork):
         self.session = self.session_factory()
         self._committed = False
         self.session_states = repository.SQLAlchemySessionStateRepository(self.session)
+        self.draft_sessions = InMemoryDraftSessionRepository(_SHARED_DRAFT_STATES)
         self.invoices = repository.SQLAlchemyInvoiceRepository(self.session)
         self.submissions = repository.SQLAlchemySubmissionRepository(self.session)
         return self
