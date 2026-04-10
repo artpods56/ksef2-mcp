@@ -6,10 +6,15 @@ from uuid import UUID
 import pytest
 from starlette.testclient import TestClient
 
-from ksef2_mcp.adapters.uow import _SHARED_IN_MEMORY_STORE
+from ksef2_mcp.adapters.draft_store import _SHARED_DRAFT_STATES
 from ksef2_mcp.config import AppSettings
 from ksef2_mcp.server import create_server
-from ksef2_mcp.services.builder import LocalInvoiceBuilderService
+from ksef2_mcp.services.drafts import (
+    CallOperation,
+    DoneOperation,
+    DraftRuntimeService,
+    SpawnOperation,
+)
 from ksef2_mcp.services.invoice_downloads import (
     _DOWNLOAD_ARTIFACTS,
     InvoiceDownloadService,
@@ -18,60 +23,89 @@ from ksef2_mcp.services.invoice_downloads import (
 
 @pytest.fixture(autouse=True)
 def clear_invoice_download_state() -> None:
-    _SHARED_IN_MEMORY_STORE["sessions"].clear()
-    _SHARED_IN_MEMORY_STORE["builders"].clear()
+    _SHARED_DRAFT_STATES.clear()
     _DOWNLOAD_ARTIFACTS.clear()
 
 
-def _create_ready_builder() -> tuple[LocalInvoiceBuilderService, UUID]:
-    service = LocalInvoiceBuilderService()
-    handle = service.create_invoice_builder()
-
-    service.add_entity(
-        uuid=handle.uuid,
-        entity_type="seller",
-        name="Sample Seller Sp. z o.o.",
-        country_code="PL",
-        address_line_1="ul. Prosta 1",
-        tax_id="5250001001",
+def _create_ready_draft() -> tuple[DraftRuntimeService, UUID]:
+    service = DraftRuntimeService()
+    created = service.create_draft("standard_invoice")
+    update = service.update_draft(
+        created.draft_id,
+        [
+            CallOperation(
+                context_id="root",
+                method="seller",
+                args={
+                    "name": "Sample Seller Sp. z o.o.",
+                    "country_code": "PL",
+                    "address_line_1": "ul. Prosta 1",
+                    "tax_id": "5250001001",
+                },
+            ),
+            CallOperation(
+                context_id="root",
+                method="buyer",
+                args={
+                    "name": "Sample Buyer Sp. z o.o.",
+                    "country_code": "PL",
+                    "address_line_1": "ul. Klienta 2",
+                    "tax_id": "5250001002",
+                },
+            ),
+            SpawnOperation(
+                context_id="root",
+                method="standard",
+                new_context_id="body_1",
+            ),
+            CallOperation(
+                context_id="body_1",
+                method="issue_date",
+                args={"value": date(2026, 3, 31)},
+            ),
+            SpawnOperation(
+                context_id="body_1",
+                method="rows",
+                new_context_id="rows_1",
+            ),
+            CallOperation(
+                context_id="rows_1",
+                method="add_line",
+                args={
+                    "name": "Consulting service",
+                    "quantity": Decimal("1"),
+                    "unit_price_net": Decimal("100.00"),
+                    "vat_rate": "23",
+                },
+            ),
+            DoneOperation(
+                context_id="rows_1",
+                method="done",
+            ),
+            DoneOperation(
+                context_id="body_1",
+                method="done",
+            ),
+        ],
     )
-    service.add_entity(
-        uuid=handle.uuid,
-        entity_type="buyer",
-        name="Sample Buyer Sp. z o.o.",
-        country_code="PL",
-        address_line_1="ul. Klienta 2",
-        tax_id="5250001002",
-    )
-    service.add_body(
-        uuid=handle.uuid,
-        issue_date=date(2026, 3, 31),
-        invoice_type="VAT",
-    )
-    service.add_line(
-        uuid=handle.uuid,
-        name="Consulting service",
-        quantity=Decimal("1"),
-        unit_price_net=Decimal("100.00"),
-        sale_category="STANDARD",
-        vat_rate="23",
-    )
-
-    return service, handle.uuid
+    assert all(operation.status == "succeeded" for operation in update.operations)
+    return service, created.draft_id
 
 
 def test_create_invoice_download_link_saves_xml_and_returns_absolute_url(
     tmp_path: Path,
 ) -> None:
-    builder_service, builder_uuid = _create_ready_builder()
-    download_service = InvoiceDownloadService(builder_service=builder_service)
+    draft_runtime_service, draft_id = _create_ready_draft()
+    download_service = InvoiceDownloadService(
+        draft_runtime_service=draft_runtime_service
+    )
     settings = AppSettings(
         default_export_directory=tmp_path,
         resource_server_url="http://downloads.example",
     )
 
     result = download_service.create_invoice_download_link(
-        uuid=builder_uuid,
+        draft_id=draft_id,
         file_name="March invoice",
         settings=settings,
     )
@@ -86,7 +120,7 @@ def test_create_invoice_download_link_saves_xml_and_returns_absolute_url(
 
 
 def test_create_invoice_download_link_saves_pdf_when_requested(tmp_path: Path) -> None:
-    builder_service, builder_uuid = _create_ready_builder()
+    draft_runtime_service, draft_id = _create_ready_draft()
 
     class StubPdfExporter:
         def export_from_string(self, invoice_xml: str) -> bytes:
@@ -94,7 +128,7 @@ def test_create_invoice_download_link_saves_pdf_when_requested(tmp_path: Path) -
             return b"%PDF-1.7 sample"
 
     download_service = InvoiceDownloadService(
-        builder_service=builder_service,
+        draft_runtime_service=draft_runtime_service,
         pdf_exporter=StubPdfExporter(),  # pyright: ignore[reportArgumentType]
     )
     settings = AppSettings(
@@ -103,7 +137,7 @@ def test_create_invoice_download_link_saves_pdf_when_requested(tmp_path: Path) -
     )
 
     result = download_service.create_invoice_download_link(
-        uuid=builder_uuid,
+        draft_id=draft_id,
         file_format="pdf",
         file_name="March invoice",
         settings=settings,
@@ -116,14 +150,16 @@ def test_create_invoice_download_link_saves_pdf_when_requested(tmp_path: Path) -
 
 
 def test_download_invoice_route_serves_saved_invoice_xml(tmp_path: Path) -> None:
-    builder_service, builder_uuid = _create_ready_builder()
-    download_service = InvoiceDownloadService(builder_service=builder_service)
+    draft_runtime_service, draft_id = _create_ready_draft()
+    download_service = InvoiceDownloadService(
+        draft_runtime_service=draft_runtime_service
+    )
     settings = AppSettings(
         default_export_directory=tmp_path,
         resource_server_url="http://testserver",
     )
     result = download_service.create_invoice_download_link(
-        uuid=builder_uuid,
+        draft_id=draft_id,
         settings=settings,
     )
 
@@ -139,7 +175,7 @@ def test_download_invoice_route_serves_saved_invoice_xml(tmp_path: Path) -> None
 
 
 def test_download_invoice_route_serves_saved_invoice_pdf(tmp_path: Path) -> None:
-    builder_service, builder_uuid = _create_ready_builder()
+    draft_runtime_service, draft_id = _create_ready_draft()
 
     class StubPdfExporter:
         def export_from_string(self, invoice_xml: str) -> bytes:
@@ -147,7 +183,7 @@ def test_download_invoice_route_serves_saved_invoice_pdf(tmp_path: Path) -> None
             return b"%PDF-1.7 route"
 
     download_service = InvoiceDownloadService(
-        builder_service=builder_service,
+        draft_runtime_service=draft_runtime_service,
         pdf_exporter=StubPdfExporter(),  # pyright: ignore[reportArgumentType]
     )
     settings = AppSettings(
@@ -155,7 +191,7 @@ def test_download_invoice_route_serves_saved_invoice_pdf(tmp_path: Path) -> None
         resource_server_url="http://testserver",
     )
     result = download_service.create_invoice_download_link(
-        uuid=builder_uuid,
+        draft_id=draft_id,
         file_format="pdf",
         settings=settings,
     )

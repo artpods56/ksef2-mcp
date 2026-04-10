@@ -7,9 +7,7 @@ from starlette.responses import FileResponse, JSONResponse, Response
 from ksef2_mcp.auth import LocalBindingsResolver, PlatformTokenVerifier
 from ksef2_mcp.config import AppSettings, BackendMode
 from ksef2_mcp.errors import ResourceNotFoundError
-from ksef2_mcp.services.invoice_downloads import get_invoice_download_service
 from ksef2_mcp.tools import register_tools
-
 
 def register_http_routes(app: FastMCP) -> None:
     @app.custom_route(
@@ -18,6 +16,8 @@ def register_http_routes(app: FastMCP) -> None:
         include_in_schema=False,
     )
     async def download_invoice_export(request: Request) -> Response:
+        from ksef2_mcp.services.invoice_downloads import get_invoice_download_service
+
         try:
             artifact = get_invoice_download_service().get_artifact_or_raise(
                 request.path_params["download_id"]

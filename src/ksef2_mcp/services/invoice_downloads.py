@@ -9,7 +9,7 @@ from ksef2.services.renderers import InvoicePDFExporter
 from ksef2_mcp.config import AppSettings, get_app_settings
 from ksef2_mcp.domain.outputs import InvoiceDownloadLinkResult
 from ksef2_mcp.errors import ResourceNotFoundError
-from ksef2_mcp.services.builder import LocalInvoiceBuilderService, get_builder_service
+from ksef2_mcp.services.drafts import DraftRuntimeService, get_draft_runtime_service
 
 DOWNLOAD_ROUTE_PREFIX = "/downloads/invoices"
 _DEFAULT_MEDIA_TYPE = "application/xml"
@@ -30,13 +30,17 @@ class InvoiceDownloadArtifact:
 
 
 _DOWNLOAD_ARTIFACTS: dict[str, InvoiceDownloadArtifact] = {}
+
+
 class InvoiceDownloadService:
     def __init__(
         self,
-        builder_service: LocalInvoiceBuilderService | None = None,
+        draft_runtime_service: DraftRuntimeService | None = None,
         pdf_exporter: InvoicePDFExporter | None = None,
     ) -> None:
-        self._builder_service = builder_service or get_builder_service()
+        self._draft_runtime_service = (
+            draft_runtime_service or get_draft_runtime_service()
+        )
         self._pdf_exporter = pdf_exporter or InvoicePDFExporter()
 
     def _normalize_file_name(
@@ -61,18 +65,21 @@ class InvoiceDownloadService:
 
     def create_invoice_download_link(
         self,
-        uuid: UUID,
+        draft_id: UUID,
         *,
         file_format: DownloadFormat = "xml",
         file_name: str | None = None,
         settings: AppSettings | None = None,
     ) -> InvoiceDownloadLinkResult:
         resolved_settings = settings or get_app_settings()
-        invoice_xml = self._builder_service.build_invoice(uuid)
+        invoice_xml = self._draft_runtime_service.build_draft(
+            draft_id,
+            output_format="xml",
+        ).content
 
         download_id = str(uuid4())
         normalized_file_name = self._normalize_file_name(
-            uuid,
+            draft_id,
             file_name,
             file_format,
         )
@@ -86,7 +93,9 @@ class InvoiceDownloadService:
             case "xml":
                 file_path.write_text(invoice_xml, encoding="utf-8")
             case "pdf":
-                file_path.write_bytes(self._pdf_exporter.export_from_string(invoice_xml))
+                file_path.write_bytes(
+                    self._pdf_exporter.export_from_string(invoice_xml)
+                )
             case _:
                 raise ValueError(f"Unsupported file format: {file_format!r}")
 
