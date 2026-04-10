@@ -49,9 +49,11 @@ class LocalSessionService(BaseSessionService):
                     uow.session_states.add_state(session_handle)
 
                     return session_handle
+        except errors.KsefMcpError:
+            raise
         except Exception as exc:
             raise errors.SessionManagementError(
-                "Failed to open interactive session"
+                f"Failed to open interactive session: {exc}"
             ) from exc
 
     def close_interactive_session(self, session_id: UUID):
@@ -68,9 +70,11 @@ class LocalSessionService(BaseSessionService):
                     session.close()
                     session_handle.close()
 
+        except errors.KsefMcpError:
+            raise
         except Exception as exc:
             raise errors.SessionManagementError(
-                "Failed to close interactive session"
+                f"Failed to close interactive session: {exc}"
             ) from exc
 
     def list_interactive_sessions(self) -> Sequence[SessionHandle]:
@@ -81,10 +85,12 @@ class LocalSessionService(BaseSessionService):
                     for session_handle in uow.session_states.list_all()
                     if session_handle.is_open
                 ]
-        except Exception:
+        except errors.KsefMcpError:
+            raise
+        except Exception as exc:
             raise errors.SessionManagementError(
-                "Failed to list all interactive sessions"
-            )
+                f"Failed to list all interactive sessions: {exc}"
+            ) from exc
 
 
 @lru_cache(maxsize=1)
